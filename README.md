@@ -16,11 +16,13 @@ A lightweight [Model Context Protocol (MCP)](https://modelcontextprotocol.io) se
   - [Playlist Operations](#playlist-operations)
 - [Setup](#setup)
   - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
   - [Creating a Spotify Developer Application](#creating-a-spotify-developer-application)
-  - [Spotify API Configuration](#spotify-api-configuration)
-  - [Authentication Process](#authentication-process)
-- [Integrating with Claude Desktop, Cursor, and VsCode (Cline)](#integrating-with-claude-desktop-and-cursor)
+  - [Config file](#config-file)
+  - [Authentication](#authentication)
+- [Install via `.mcp.json`](#install-via-mcpjson)
+  - [Quick start (Claude Code)](#quick-start-claude-code)
+  - [Other clients (Claude Desktop, Cursor, Cline)](#other-clients-claude-desktop-cursor-cline)
+  - [Local clone instead of npx](#local-clone-instead-of-npx)
 </details>
 
 ## Example Interactions
@@ -346,9 +348,51 @@ npm run auth
 
 The script opens your browser, you authorize the Spotify app, and the tokens are written back to the config file. After this you never need to run `auth` again — the server refreshes the access token automatically (the refresh token is long-lived).
 
-## Integrating with Claude Desktop, Cursor, and VS Code
+## Install via `.mcp.json`
 
-### Recommended: `npx` (no clone required)
+The server is designed to be run directly by `npx` — no clone, no manual build step. Drop the snippet below into your MCP client's config file (Claude Code reads `.mcp.json` at the project root; other clients read their own files, see below) and you're done.
+
+### Quick start (Claude Code)
+
+1. Create `spotify-config.json` and run the one-time auth flow (see [Setup](#setup)).
+2. Create a `.mcp.json` file at the root of your project:
+
+   ```json
+   {
+     "mcpServers": {
+       "spotify": {
+         "command": "npx",
+         "args": ["-y", "spotify-mcp-server"],
+         "env": {
+           "SPOTIFY_CONFIG_PATH": "/absolute/path/to/spotify-config.json"
+         }
+       }
+     }
+   }
+   ```
+
+3. Start Claude Code in that directory. It'll pick up the server automatically and prompt you to approve it on first use.
+
+**Notes on the config:**
+
+- `SPOTIFY_CONFIG_PATH` must be an **absolute path** to a file the server can both read and write (refreshed access tokens get persisted back to it). If you placed the file at the default location (`~/.config/spotify-mcp-server/spotify-config.json`), the `env` block is optional.
+- `-y` tells npx to install the package without a confirmation prompt — important since MCP servers run non-interactively.
+- Pin a version: `"args": ["-y", "spotify-mcp-server@1.0.0"]`.
+- Run a fork: `"args": ["-y", "github:your-name/spotify-mcp-server"]` (the `prepare` script compiles on install).
+- To add MCP to a Claude Code project without hand-editing JSON, you can instead run `claude mcp add spotify -- npx -y spotify-mcp-server` (add `-e SPOTIFY_CONFIG_PATH=/abs/path` if needed).
+
+### Other clients (Claude Desktop, Cursor, Cline)
+
+The block shape is identical; only the file location differs.
+
+| Client | Config file |
+|---|---|
+| Claude Code | `.mcp.json` (project root) or `~/.claude.json` |
+| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) / `%APPDATA%\Claude\claude_desktop_config.json` (Windows) |
+| Cursor | Settings → MCP → Add Server, or `~/.cursor/mcp.json` |
+| Cline (VS Code) | `cline_mcp_settings.json` |
+
+Cline additionally supports an `autoApprove` list to skip confirmation for safe read-only tools:
 
 ```json
 {
@@ -356,19 +400,16 @@ The script opens your browser, you authorize the Spotify app, and the tokens are
     "spotify": {
       "command": "npx",
       "args": ["-y", "spotify-mcp-server"],
-      "env": {
-        "SPOTIFY_CONFIG_PATH": "/absolute/path/to/spotify-config.json"
-      }
+      "env": { "SPOTIFY_CONFIG_PATH": "/absolute/path/to/spotify-config.json" },
+      "autoApprove": ["getNowPlaying", "getRecentlyPlayed", "getMyPlaylists"]
     }
   }
 }
 ```
 
-Set `SPOTIFY_CONFIG_PATH` to an absolute location under your home directory so the server can both read credentials and write refreshed tokens. If you've already placed the file at `~/.config/spotify-mcp-server/spotify-config.json`, the `env` block isn't needed.
+### Local clone instead of npx
 
-You can also pin a version (`spotify-mcp-server@1.0.0`) or point at a fork via a git URL (`npx -y github:marcelmarais/spotify-mcp-server`).
-
-### Local clone
+If you'd rather run from a checkout (e.g. while hacking on the server itself):
 
 ```json
 {
@@ -381,16 +422,4 @@ You can also pin a version (`spotify-mcp-server@1.0.0`) or point at a fork via a
 }
 ```
 
-For Cline (`cline_mcp_settings.json`) the shape is the same; add tool names you trust to `autoApprove`:
-
-```json
-{
-  "mcpServers": {
-    "spotify": {
-      "command": "npx",
-      "args": ["-y", "spotify-mcp-server"],
-      "autoApprove": ["getNowPlaying", "getRecentlyPlayed"]
-    }
-  }
-}
-```
+Remember to `npm install && npm run build` in the clone first.
