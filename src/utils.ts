@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import readline from 'node:readline/promises';
 import { URL, fileURLToPath } from 'node:url';
 import { SpotifyApi } from '@spotify/web-api-ts-sdk';
 import open from 'open';
@@ -79,6 +80,92 @@ export function saveSpotifyConfig(config: SpotifyConfig): void {
   const configFile = resolveConfigPath();
   fs.mkdirSync(path.dirname(configFile), { recursive: true });
   fs.writeFileSync(configFile, JSON.stringify(config, null, 2), 'utf8');
+}
+
+/**
+ * Where `init` should create a brand-new config. Honors $SPOTIFY_CONFIG_PATH so
+ * users can pin a custom location, otherwise lands at the per-user default
+ * (NOT cwd, to avoid silently writing into whatever directory the user happened
+ * to run the command from).
+ */
+function initTargetPath(): string {
+  const override = process.env.SPOTIFY_CONFIG_PATH;
+  if (override && override.length > 0) return path.resolve(override);
+  return defaultConfigPath();
+}
+
+export interface InitResult {
+  path: string;
+  created: boolean;
+}
+
+/**
+ * Interactively create a Spotify config file with clientId + clientSecret.
+ * Returns `created: false` if a config already exists at the target path.
+ * Throws when stdin isn't a TTY (no way to prompt) or on user cancellation.
+ */
+export async function initSpotifyConfig(): Promise<InitResult> {
+  // If any of the resolver locations already has a config, defer to it instead
+  // of creating a parallel file that the loader would never pick up.
+  const existing = resolveConfigPath();
+  if (fs.existsSync(existing)) {
+    return { path: existing, created: false };
+  }
+
+  const target = initTargetPath();
+
+  if (!process.stdin.isTTY) {
+    throw new Error(
+      `No Spotify config found at ${target} and stdin is not a TTY, ` +
+        'so I can\'t prompt for credentials. Run `spotify-mcp-server init` ' +
+        'in a terminal, or set SPOTIFY_CONFIG_PATH to an existing file.',
+    );
+  }
+
+  // Prompts go to stderr so they show up in interactive use without ever
+  // landing on stdout (which the MCP server reserves for JSON-RPC).
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stderr,
+  });
+  try {
+    log(`A new Spotify MCP config will be created at:\n  ${target}\n`);
+    const confirm = (await rl.question('Continue? [Y/n] ')).trim().toLowerCase();
+    if (confirm !== '' && confirm !== 'y' && confirm !== 'yes') {
+      throw new Error('Cancelled by user');
+    }
+
+    log(
+      '\nGet your credentials at https://developer.spotify.com/dashboard\n' +
+        '(open your app — copy the Client ID, then click "Show Client Secret")\n' +
+        `Make sure ${DEFAULT_REDIRECT_URI} is registered as a Redirect URI on the same app.\n`,
+    );
+
+    const clientId = (await rl.question('Client ID: ')).trim();
+    if (!clientId) throw new Error('Client ID is required');
+
+    const clientSecret = (await rl.question('Client Secret: ')).trim();
+    if (!clientSecret) throw new Error('Client Secret is required');
+
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(
+      target,
+      `${JSON.stringify({ clientId, clientSecret }, null, 2)}\n`,
+      'utf8',
+    );
+    // Restrict to the current user since the file holds a client secret and
+    // (after auth) refresh tokens.
+    try {
+      fs.chmodSync(target, 0o600);
+    } catch {
+      // chmod is best-effort; non-POSIX filesystems may not support it.
+    }
+
+    log(`\nConfig written to ${target}`);
+    return { path: target, created: true };
+  } finally {
+    rl.close();
+  }
 }
 
 let cachedSpotifyApi: SpotifyApi | null = null;
