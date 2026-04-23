@@ -309,8 +309,10 @@ A lightweight [Model Context Protocol (MCP)](https://modelcontextprotocol.io) se
 5. Accept the Terms of Service and click "Create"
 6. In your new app's dashboard, you'll see your **Client ID**
 7. Click "Show Client Secret" to reveal your **Client Secret**
-8. Click "Edit Settings" and add a Redirect URI (e.g., `http://127.0.0.1:8888/callback`)
+8. Click "Edit Settings" and add this exact Redirect URI: `http://127.0.0.1:8888/callback`
 9. Save your changes
+
+> The auth flow spins up a tiny local HTTP server on `127.0.0.1:8888` to catch the OAuth callback, so the URI registered with Spotify must match exactly. You can override the host/port by setting `redirectUri` in your config (and updating Spotify to match), but the default Just Works for almost everyone.
 
 ### Config file
 
@@ -319,10 +321,11 @@ Create a `spotify-config.json` with your credentials:
 ```json
 {
   "clientId": "your-client-id",
-  "clientSecret": "your-client-secret",
-  "redirectUri": "http://127.0.0.1:8888/callback"
+  "clientSecret": "your-client-secret"
 }
 ```
+
+`redirectUri` defaults to `http://127.0.0.1:8888/callback` and only needs to be set if you registered something different with Spotify.
 
 The server looks for the config file in this order:
 
