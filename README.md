@@ -17,8 +17,7 @@ A lightweight [Model Context Protocol (MCP)](https://modelcontextprotocol.io) se
 - [Setup](#setup)
   - [Prerequisites](#prerequisites)
   - [Creating a Spotify Developer Application](#creating-a-spotify-developer-application)
-  - [Config file](#config-file)
-  - [Authentication](#authentication)
+  - [One-shot setup](#one-shot-setup)
 - [Install via `.mcp.json`](#install-via-mcpjson)
   - [Quick start (Claude Code)](#quick-start-claude-code)
   - [Other clients (Claude Desktop, Cursor, Cline)](#other-clients-claude-desktop-cursor-cline)
@@ -309,44 +308,52 @@ A lightweight [Model Context Protocol (MCP)](https://modelcontextprotocol.io) se
 5. Accept the Terms of Service and click "Create"
 6. In your new app's dashboard, you'll see your **Client ID**
 7. Click "Show Client Secret" to reveal your **Client Secret**
-8. Click "Edit Settings" and add a Redirect URI (e.g., `http://127.0.0.1:8888/callback`)
+8. Click "Edit Settings" and add this exact Redirect URI: `http://127.0.0.1:8888/callback`
 9. Save your changes
 
-### Config file
+> The auth flow spins up a tiny local HTTP server on `127.0.0.1:8888` to catch the OAuth callback, so the URI registered with Spotify must match exactly. You can override the host/port by setting `redirectUri` in your config (and updating Spotify to match), but the default Just Works for almost everyone.
 
-Create a `spotify-config.json` with your credentials:
+### One-shot setup
 
-```json
-{
-  "clientId": "your-client-id",
-  "clientSecret": "your-client-secret",
-  "redirectUri": "http://127.0.0.1:8888/callback"
-}
+Run this once and you're done:
+
+```bash
+npx -y spotify-mcp-server auth
 ```
 
-The server looks for the config file in this order:
+It will:
+
+1. Prompt for your **Client ID** and **Client Secret** and write them to `~/.config/spotify-mcp-server/spotify-config.json` (creating the directory if needed). Skipped if you already have a config there.
+2. Open your browser to authorize the Spotify app.
+3. Catch the OAuth callback on `127.0.0.1:8888`, exchange the code for access + refresh tokens, and persist them back to the config.
+
+After this the server refreshes access tokens automatically — you should never need to re-run `auth`.
+
+If you only want to create the config file (no browser flow), run `npx -y spotify-mcp-server init` instead.
+
+#### Config file location
+
+The server resolves the config in this order:
 
 1. `$SPOTIFY_CONFIG_PATH` (if set)
 2. `./spotify-config.json` (current working directory)
 3. `<repo>/spotify-config.json` (when run from a checkout)
-4. `$XDG_CONFIG_HOME/spotify-mcp-server/spotify-config.json`, falling back to `~/.config/spotify-mcp-server/spotify-config.json`
+4. `$XDG_CONFIG_HOME/spotify-mcp-server/spotify-config.json` → `~/.config/spotify-mcp-server/spotify-config.json`
 
-The tokens populated by the auth flow get written back to whichever path was resolved, so **the same path must be writable** by the MCP server at runtime (that's where refreshed access tokens are persisted).
+`init` and `auth` write to `$SPOTIFY_CONFIG_PATH` if set, otherwise to the default location at #4. Refresh tokens are persisted back to wherever the loader found the file, so **the path must remain writable** for the running server.
 
-### Authentication
+#### Manual config
 
-Run the one-time OAuth flow to fetch and save access/refresh tokens:
+If you'd rather hand-edit, create `spotify-config.json` with:
 
-```bash
-# Install from npm / run without cloning
-npx -y spotify-mcp-server auth
-
-# Or, from a clone
-npm install
-npm run auth
+```json
+{
+  "clientId": "your-client-id",
+  "clientSecret": "your-client-secret"
+}
 ```
 
-The script opens your browser, you authorize the Spotify app, and the tokens are written back to the config file. After this you never need to run `auth` again — the server refreshes the access token automatically (the refresh token is long-lived).
+`redirectUri` defaults to `http://127.0.0.1:8888/callback` and only needs to be set if you registered something different with Spotify.
 
 ## Install via `.mcp.json`
 
