@@ -9,6 +9,8 @@ import open from 'open';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+export const DEFAULT_REDIRECT_URI = 'http://127.0.0.1:8888/callback';
+
 export interface SpotifyConfig {
   clientId: string;
   clientSecret: string;
@@ -57,11 +59,12 @@ export function loadSpotifyConfig(): SpotifyConfig {
 
   try {
     const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
-    if (!(config.clientId && config.clientSecret && config.redirectUri)) {
+    if (!(config.clientId && config.clientSecret)) {
       throw new Error(
-        'Spotify configuration must include clientId, clientSecret, and redirectUri.',
+        'Spotify configuration must include clientId and clientSecret.',
       );
     }
+    if (!config.redirectUri) config.redirectUri = DEFAULT_REDIRECT_URI;
     return config;
   } catch (error) {
     throw new Error(
